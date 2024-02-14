@@ -11,4 +11,6 @@ keywords = ["tetris"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+js-sys = "0.3.68"
 serde = { version = "1.0", optional = true }
+wasm-bindgen = "0.2.91"

@@ -1,22 +1,26 @@
-
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsError;
+use js_sys::Array;
+#[wasm_bindgen]
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Fumen {
-    pub pages: Vec<Page>,
+    pages: Vec<Page>,
     pub guideline: bool
 }
-
+#[wasm_bindgen]
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Page {
     pub piece: Option<Piece>,
-    /// y-up
-    pub field: [[CellColor; 10]; 23],
-    pub garbage_row: [CellColor; 10],
+
     pub rise: bool,
     pub mirror: bool,
     pub lock: bool,
-    pub comment: Option<String>
+    comment: Option<String>,
+    /// y-up
+    field: [[CellColor; 10]; 23],
+    garbage_row: [CellColor; 10]
 }
-
+#[wasm_bindgen]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum PieceType {
     I = 1,
@@ -27,7 +31,21 @@ pub enum PieceType {
     J = 6,
     S = 7
 }
-
+impl PieceType { 
+    pub fn from_i64(v: i64) -> PieceType {
+        match v {
+            1 => PieceType::I,
+            2 => PieceType::L,
+            3 => PieceType::O,
+            4 => PieceType::Z,
+            5 => PieceType::T,
+            6 => PieceType::J,
+            7 => PieceType::S,
+            _ => unreachable!()
+        }
+    }
+}
+#[wasm_bindgen]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum RotationState {
     South = 0,
@@ -38,6 +56,7 @@ pub enum RotationState {
 
 
 /// Represents a tetromino piece using true rotation.
+#[wasm_bindgen]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Piece {
     pub kind: PieceType,
@@ -46,7 +65,7 @@ pub struct Piece {
     /// y-up
     pub y: u32
 }
-
+#[wasm_bindgen]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum CellColor {
     Empty = 0,
@@ -69,7 +88,7 @@ const BASE64_CHARS: [u8; 64] = [
     b'y', b'z', b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7',
     b'8', b'9', b'+', b'/'
 ];
-
+#[wasm_bindgen]
 impl Fumen {
     /// Encode as a fumen data string.
     pub fn encode(&self) -> String {
@@ -81,7 +100,7 @@ impl Fumen {
         let mut first = true;
         for page in &self.pages {
             // encode field
-            let deltas = fumen_field_delta(prev_field, page.fumen_field());
+            let deltas = fumen_field_delta(prev_field, (*page).fumen_field());
             if deltas == [[8; 10]; 24] {
                 // do special-case unchanged field stuff
                 if let Some((ref mut index, ref mut count)) = empty_field {
@@ -125,7 +144,7 @@ impl Fumen {
                 data.push(BASE64_CHARS[num >> 6 & 0x3F]);
             }
 
-            let page_flags = page.fumen_number() as usize + if first {
+            let page_flags = (*page).fumen_number() as usize + if first {
                 first = false;
                 self.guideline as usize * 240 * 128
             } else { 0 };
@@ -133,7 +152,7 @@ impl Fumen {
             data.push(BASE64_CHARS[page_flags >> 6 & 0x3F]);
             data.push(BASE64_CHARS[page_flags >> 12 & 0x3F]);
 
-            if let Some(ref comment) = page.comment {
+            if let Some(ref comment) = (*page).comment {
                 let mut encoded = js_escape(comment);
                 encoded.truncate(4095);
                 data.push(BASE64_CHARS[encoded.len() & 0x3F]);
@@ -153,7 +172,7 @@ impl Fumen {
             }
 
             // this handles piece locking, line clear, mirror, and rise rules
-            prev_field = page.next_page().fumen_field();
+            prev_field = (*page).next_page().fumen_field();
         }
 
         // finalize the empty field sequence
@@ -165,11 +184,15 @@ impl Fumen {
     }
 
     /// Decodes a fumen data string.
+    /// 
     pub fn decode(data: &str) -> Result<Fumen, DecodeFumenError> {
-        Fumen::decode_opt(data).ok_or(DecodeFumenError)
+        unsafe { 
+            Fumen::decode_opt(data).ok_or(DecodeFumenError)
+        }
+        
     }
 
-    fn decode_opt(data: &str) -> Option<Fumen> {
+    unsafe fn decode_opt(data: &str) -> Option<Fumen> {
         if data.chars().take(5).collect::<String>() != "v115@" {
             return None;
         }
@@ -204,13 +227,13 @@ impl Fumen {
                 }
                 for y in 0..23 {
                     for x in 0..10 {
-                        let value = delta[y][x] + page.field[22-y][x] as usize - 8;
-                        page.field[22-y][x] = decode_cell_color(value)?;
+                        let value = delta[y][x] + (*page).field[22-y][x] as usize - 8;
+                        (*page).field[22-y][x] = decode_cell_color(value)?;
                     }
                 }
                 for x in 0..10 {
-                    let value = delta[23][x] + page.garbage_row[x] as usize - 8;
-                    page.garbage_row[x] = decode_cell_color(value)?;
+                    let value = delta[23][x] + (*page).garbage_row[x] as usize - 8;
+                    (*page).garbage_row[x] = decode_cell_color(value)?;
                 }
             } else {
                 empty_fields -= 1;
@@ -222,7 +245,7 @@ impl Fumen {
             let piece_rot = number / 8 % 4;
             let piece_pos = number / 32 % 240;
 
-            page.piece = if piece_type == 0 { None } else {
+            (*page).piece = if piece_type == 0 { None } else {
                 let kind = match piece_type {
                     1 => PieceType::I,
                     2 => PieceType::L,
@@ -265,11 +288,11 @@ impl Fumen {
             };
 
             let flags = number / 32 / 240;
-            page.rise = flags & 0b1 != 0;
-            page.mirror = flags & 0b10 != 0;
+            (*page).rise = flags & 0b1 != 0;
+            (*page).mirror = flags & 0b10 != 0;
             let guideline = flags & 0b100 != 0;
             let comment = flags & 0b1000 != 0;
-            page.lock = flags & 0b10000 == 0;
+            (*page).lock = flags & 0b10000 == 0;
 
             if comment {
                 let mut length = iter.next()?? + iter.next()?? * 64;
@@ -283,7 +306,7 @@ impl Fumen {
                         number /= 96;
                     }
                 }
-                page.comment = Some(js_unescape(&escaped));
+                (*page).comment = Some(js_unescape(&escaped));
             }
 
             if fumen.pages.len() == 1 {
@@ -296,12 +319,26 @@ impl Fumen {
     /// Create a new page, in the same way as creating a new page in fumen does.
     ///
     /// This will apply the piece locking, line clear, rise, and mirror rules just like fumen does.
-    pub fn add_page(&mut self) -> &mut Page {
+    #[wasm_bindgen(js_name = "addPage")]
+    pub fn add_page(&mut self) -> *mut Page {
         self.pages.push(match self.pages.last() {
             Some(p) => p.next_page(),
             None => Page::default()
         });
         self.pages.last_mut().unwrap()
+    }
+    #[wasm_bindgen(getter)]
+    pub fn pages(&self) -> Array {
+        let array = Array::new();
+        for pg in self.pages.iter() {
+            array.push(&JsValue::from(pg.clone()));
+        }
+        array
+    }
+}
+impl Fumen {
+    pub fn get_pages(&self) -> &Vec<Page> {
+        &self.pages
     }
 }
 
@@ -342,7 +379,7 @@ fn from_base64(c: char) -> Option<usize> {
         _ => return None
     })
 }
-
+#[wasm_bindgen()]
 impl Page {
     fn fumen_number(&self) -> u32 {
         self.piece.map(|p| p.fumen_number()).unwrap_or(0) + 240 * 32 * (
@@ -353,6 +390,7 @@ impl Page {
         )
     }
 
+    
     fn fumen_field(&self) -> [[CellColor; 10]; 24] {
         let mut field = [[CellColor::Empty; 10]; 24];
         for y in 0..23 {
@@ -361,7 +399,7 @@ impl Page {
         field[23] = self.garbage_row;
         field
     }
-
+    #[wasm_bindgen(js_name = "nextPage")]
     /// Create a page from this page in the same way as fumen does.
     ///
     /// This will apply the piece locking, line clear, rise, and mirror rules just like fumen does.
@@ -426,8 +464,78 @@ impl Page {
             }
         }
     }
+    #[wasm_bindgen(getter)]
+    pub fn comment(&self) -> Option<String> {
+        self.comment.clone()
+    }
+    #[wasm_bindgen(getter)]
+    pub fn field(&self) -> Array {
+        let array = Array::new();
+        for row in &self.field {
+            let array_row = Array::new();
+            for cell in row {
+            
+                array_row.push(&JsValue::from(*cell as u8));
+            }
+        }
+        array
+    }
+    #[wasm_bindgen(getter)]
+    pub fn garbage_row(&self) -> Array {
+        let array = Array::new();
+        for cell in &self.garbage_row {
+            array.push(&JsValue::from(*cell as u8));
+        }
+        array
+    }
+    #[wasm_bindgen(setter)]
+    pub fn set_comment(&mut self, comment: Option<String>) {
+        self.comment = comment
+    }
+    #[wasm_bindgen(setter)]
+    pub fn set_field(&mut self, field: Array) {
+        for (y, row) in field.iter().enumerate() {
+            let row: Array = Array::from(&row);
+            for (x, cell) in row.iter().enumerate() {
+                let c = cell.as_f64();
+                if let Some(c) = c {
+                    
+                    self.field[y][x] = PieceType::from_i64(c as i64).into();
+                }
+            }
+        }
+    }
+    #[wasm_bindgen(setter)]
+    pub fn set_garbage_row(&mut self, garbage_row: Array) {
+        for (x, cell) in garbage_row.iter().enumerate() {
+            let c = cell.as_f64();
+            if let Some(c) = c {
+                self.garbage_row[x] = PieceType::from_i64(c as i64).into();
+            }
+        }
+    }
 }
-
+impl Page {
+    pub fn get_field(&self) -> [[CellColor; 10]; 23] {
+        self.field
+    }
+    pub fn get_garbage_row(&self) -> [CellColor; 10] {
+        self.garbage_row
+    }
+    pub fn get_comment(&self) -> Option<String> {
+        self.comment.clone()
+    }
+    pub fn set_field_rs(&mut self, field: [[CellColor; 10]; 23]) {
+        self.field = field;
+    }
+    pub fn set_garbage_row_rs(&mut self, garbage_row: [CellColor; 10]) {
+        self.garbage_row = garbage_row;
+    }
+    pub fn set_comment_rs(&mut self, comment: Option<String>) {
+        self.comment = comment
+    }
+}
+#[wasm_bindgen]
 impl Piece {
     fn fumen_number(&self) -> u32 {
         self.kind as u32 +
@@ -501,7 +609,6 @@ impl Default for Fumen {
         }
     }
 }
-
 impl Default for Page {
     fn default() -> Self {
         Page {
@@ -615,7 +722,7 @@ fn js_unescape(s: &str) -> String {
     }
     String::from_utf16_lossy(&result_utf16)
 }
-
+#[wasm_bindgen]
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct DecodeFumenError;
 
@@ -635,71 +742,83 @@ mod tests {
     fn empty() {
         let fumen = Fumen::default();
         assert_eq!(fumen.encode(), "v115@");
-        assert_eq!(Fumen::decode("v115@"), Ok(fumen));
+        unsafe {
+            assert_eq!(Fumen::decode("v115@"), Ok(fumen));
+        }
+        
     }
 
     #[test]
     fn one_page_lock_piece() {
         let mut fumen = Fumen::default();
-        fumen.add_page().piece = Some(Piece {
-            kind: PieceType::T,
-            rotation: RotationState::North,
-            x: 2,
-            y: 0
-        });
-        assert_eq!(fumen.encode(), "v115@vhAVPJ");
-        assert_eq!(Fumen::decode("v115@vhAVPJ"), Ok(fumen));
+        unsafe {
+            (*fumen.add_page()).piece = Some(Piece {
+                kind: PieceType::T,
+                rotation: RotationState::North,
+                x: 2,
+                y: 0
+            });
+            assert_eq!(fumen.encode(), "v115@vhAVPJ");
+            assert_eq!(Fumen::decode("v115@vhAVPJ"), Ok(fumen));
+        }
+
     }
 
     #[test]
     fn lock_piece() {
         let mut fumen = Fumen::default();
-        fumen.add_page().piece = Some(Piece {
-            kind: PieceType::T,
-            rotation: RotationState::North,
-            x: 2,
-            y: 0
-        });
-        fumen.pages.push(Page::default());
-        assert_eq!(fumen.encode(), "v115@vhAVPJThQLHeSLPeAAA");
-        assert_eq!(Fumen::decode("v115@vhAVPJThQLHeSLPeAAA"), Ok(fumen));
+        unsafe {
+            (*fumen.add_page()).piece = Some(Piece {
+                kind: PieceType::T,
+                rotation: RotationState::North,
+                x: 2,
+                y: 0
+            });
+            fumen.pages.push(Page::default());
+            assert_eq!(fumen.encode(), "v115@vhAVPJThQLHeSLPeAAA");
+            assert_eq!(Fumen::decode("v115@vhAVPJThQLHeSLPeAAA"), Ok(fumen));
+        }
+       
     }
 
     #[test]
     fn o_piece_wobble() {
-        let mut fumen = Fumen::default();
-        let page = fumen.add_page();
-        page.field[2][3] = CellColor::Grey;
-        page.field[5][3] = CellColor::Grey;
-        page.field[8][3] = CellColor::Grey;
-        page.piece = Some(Piece {
-            kind: PieceType::O,
-            rotation: RotationState::North,
-            x: 3, y: 0
-        });
-        fumen.add_page().piece = Some(Piece {
-            kind: PieceType::O,
-            rotation: RotationState::West,
-            x: 4, y: 3
-        });
-        fumen.add_page().piece = Some(Piece {
-            kind: PieceType::O,
-            rotation: RotationState::South,
-            x: 4, y: 7
-        });
-        fumen.add_page().piece = Some(Piece {
-            kind: PieceType::O,
-            rotation: RotationState::East,
-            x: 3, y: 10
-        });
-        fumen.pages.push(Page::default());
-        assert_eq!(
-            fumen.encode(),
-            "v115@OgA8ceA8ceA8jezKJvhC7bBjMBr9A6fxSHexSHeAAIexSHexSHeAAIexSHexSHeAAIexSHexSOeAAA"
-        );
-        assert_eq!(Fumen::decode(
-            "v115@OgA8ceA8ceA8jezKJvhC7bBjMBr9A6fxSHexSHeAAIexSHexSHeAAIexSHexSHeAAIexSHexSOeAAA"
-        ), Ok(fumen));
+        unsafe {
+            let mut fumen = Fumen::default();
+            let page = fumen.add_page();
+            (*page).field[2][3] = CellColor::Grey;
+            (*page).field[5][3] = CellColor::Grey;
+            (*page).field[8][3] = CellColor::Grey;
+            (*page).piece = Some(Piece {
+                kind: PieceType::O,
+                rotation: RotationState::North,
+                x: 3, y: 0
+            });
+            (*fumen.add_page()).piece = Some(Piece {
+                kind: PieceType::O,
+                rotation: RotationState::West,
+                x: 4, y: 3
+            });
+            (*fumen.add_page()).piece = Some(Piece {
+                kind: PieceType::O,
+                rotation: RotationState::South,
+                x: 4, y: 7
+            });
+            (*fumen.add_page()).piece = Some(Piece {
+                kind: PieceType::O,
+                rotation: RotationState::East,
+                x: 3, y: 10
+            });
+            fumen.pages.push(Page::default());
+            assert_eq!(
+                fumen.encode(),
+                "v115@OgA8ceA8ceA8jezKJvhC7bBjMBr9A6fxSHexSHeAAIexSHexSHeAAIexSHexSHeAAIexSHexSOeAAA"
+            );
+            assert_eq!(Fumen::decode(
+                "v115@OgA8ceA8ceA8jezKJvhC7bBjMBr9A6fxSHexSHeAAIexSHexSHeAAIexSHexSHeAAIexSHexSOeAAA"
+            ), Ok(fumen));
+        }
+
     }
 
     #[test]
@@ -715,141 +834,171 @@ mod tests {
 
     #[test]
     fn fumen_field_deltas() {
-        let mut page = Page::default();
-        let empty = page.fumen_field();
-        page.field[0] = [CellColor::Grey; 10];
-        page.garbage_row[0] = CellColor::Grey;
-        let mut deltas = [[8; 10]; 24];
-        deltas[22] = [16; 10];
-        deltas[23][0] = 16;
-        assert_eq!(fumen_field_delta(empty, page.fumen_field()), deltas);
+        unsafe {
+            let mut page = Page::default();
+            let empty = page.fumen_field();
+            page.field[0] = [CellColor::Grey; 10];
+            page.garbage_row[0] = CellColor::Grey;
+            let mut deltas = [[8; 10]; 24];
+            deltas[22] = [16; 10];
+            deltas[23][0] = 16;
+            assert_eq!(fumen_field_delta(empty, page.fumen_field()), deltas);
+
+        }
     }
+      
 
     #[test]
     fn simple_field() {
-        let mut fumen = Fumen::default();
-        fumen.add_page().field[22][0] = CellColor::Grey;
-        assert_eq!(fumen.encode(), "v115@A8uhAgH");
-        assert_eq!(Fumen::decode("v115@A8uhAgH"), Ok(fumen));
+        unsafe {
+            let mut fumen = Fumen::default();
+            (*fumen.add_page()).field[22][0] = CellColor::Grey;
+            assert_eq!(fumen.encode(), "v115@A8uhAgH");
+            assert_eq!(Fumen::decode("v115@A8uhAgH"), Ok(fumen));
+        }
+
     }
 
     #[test]
     fn arbitrary_field() {
-        let mut fumen = Fumen::default();
-        let page = fumen.add_page();
-        page.field[0] = [CellColor::Grey; 10];
-        page.field[0][4] = CellColor::Empty;
-        page.field[0][7] = CellColor::T;
-        page.field[1] = [CellColor::S; 10];
-        page.field[1][1] = CellColor::Empty;
-        page.field[1][9] = CellColor::L;
-        page.field[2] = [CellColor::Z; 10];
-        page.field[2][6] = CellColor::Empty;
-        page.field[2][2] = CellColor::O;
-        page.field[3] = [CellColor::I; 10];
-        page.field[3][2] = CellColor::Empty;
-        page.field[3][6] = CellColor::J;
-        assert_eq!(fumen.encode(), "v115@9gxhAeyhg0yhBtQpCtAeCtQ4AeW4glD8AeB8wwB8JeAgH");
-        assert_eq!(
-            Fumen::decode("v115@9gxhAeyhg0yhBtQpCtAeCtQ4AeW4glD8AeB8wwB8JeAgH"),
-            Ok(fumen)
-        );
+        unsafe {
+            let mut fumen = Fumen::default();
+            let page = fumen.add_page();
+            (*page).field[0] = [CellColor::Grey; 10];
+            (*page).field[0][4] = CellColor::Empty;
+            (*page).field[0][7] = CellColor::T;
+            (*page).field[1] = [CellColor::S; 10];
+            (*page).field[1][1] = CellColor::Empty;
+            (*page).field[1][9] = CellColor::L;
+            (*page).field[2] = [CellColor::Z; 10];
+            (*page).field[2][6] = CellColor::Empty;
+            (*page).field[2][2] = CellColor::O;
+            (*page).field[3] = [CellColor::I; 10];
+            (*page).field[3][2] = CellColor::Empty;
+            (*page).field[3][6] = CellColor::J;
+            assert_eq!(fumen.encode(), "v115@9gxhAeyhg0yhBtQpCtAeCtQ4AeW4glD8AeB8wwB8JeAgH");
+            assert_eq!(
+                Fumen::decode("v115@9gxhAeyhg0yhBtQpCtAeCtQ4AeW4glD8AeB8wwB8JeAgH"),
+                Ok(fumen)
+            );
+        }
+       
     }
 
     #[test]
     fn line_clear() {
-        let mut fumen = Fumen::default();
-        fumen.add_page().field[0] = [CellColor::Grey; 10];
-        fumen.add_page();
-        assert_eq!(fumen.encode(), "v115@bhJ8JeAgHvhAAAA");
-        assert_eq!(Fumen::decode("v115@bhJ8JeAgHvhAAAA"), Ok(fumen));
+        unsafe {
+            let mut fumen = Fumen::default();
+            (*fumen.add_page()).field[0] = [CellColor::Grey; 10];
+            fumen.add_page();
+            assert_eq!(fumen.encode(), "v115@bhJ8JeAgHvhAAAA");
+            assert_eq!(Fumen::decode("v115@bhJ8JeAgHvhAAAA"), Ok(fumen));
+
+        }
+      
     }
 
     #[test]
     fn rise() {
-        let mut fumen = Fumen::default();
-        let page = fumen.add_page();
-        page.field[0][1] = CellColor::I;
-        page.garbage_row[4] = CellColor::Grey;
-        page.rise = true;
-        fumen.add_page();
-        fumen.pages.push(Page::default());
-        assert_eq!(fumen.encode(), "v115@chwhLeA8EeAYJvhAAAAShQaLeAAOeAAA");
-        assert_eq!(Fumen::decode("v115@chwhLeA8EeAYJvhAAAAShQaLeAAOeAAA"), Ok(fumen));
-    }
+        unsafe {
+            let mut fumen = Fumen::default();
+            let page = fumen.add_page();
+            (*page).field[0][1] = CellColor::I;
+            (*page).garbage_row[4] = CellColor::Grey;
+            (*page).rise = true;
+            fumen.add_page();
+            fumen.pages.push(Page::default());
+            assert_eq!(fumen.encode(), "v115@chwhLeA8EeAYJvhAAAAShQaLeAAOeAAA");
+            assert_eq!(Fumen::decode("v115@chwhLeA8EeAYJvhAAAAShQaLeAAOeAAA"), Ok(fumen));
+        }
+        }
+       
 
     #[test]
     fn mirror() {
-        let mut fumen = Fumen::default();
-        let page = fumen.add_page();
-        page.field[0] = [
-            CellColor::I, CellColor::L, CellColor::O, CellColor::Z, CellColor::T,
-            CellColor::J, CellColor::S, CellColor::Grey, CellColor::Empty, CellColor::Empty
-        ];
-        page.mirror = true;
-        fumen.add_page();
-        fumen.pages.push(Page::default());
-        assert_eq!(fumen.encode(), "v115@bhwhglQpAtwwg0Q4A8LeAQLvhAAAAdhAAwDgHQLAPwSgWQaJeAAA");
-        assert_eq!(
-            Fumen::decode("v115@bhwhglQpAtwwg0Q4A8LeAQLvhAAAAdhAAwDgHQLAPwSgWQaJeAAA"),
-            Ok(fumen)
-        );
+        unsafe {
+            let mut fumen = Fumen::default();
+            let page = fumen.add_page();
+            (*page).field[0] = [
+                CellColor::I, CellColor::L, CellColor::O, CellColor::Z, CellColor::T,
+                CellColor::J, CellColor::S, CellColor::Grey, CellColor::Empty, CellColor::Empty
+            ];
+            (*page).mirror = true;
+            fumen.add_page();
+            fumen.pages.push(Page::default());
+            assert_eq!(fumen.encode(), "v115@bhwhglQpAtwwg0Q4A8LeAQLvhAAAAdhAAwDgHQLAPwSgWQaJeAAA");
+            assert_eq!(
+                Fumen::decode("v115@bhwhglQpAtwwg0Q4A8LeAQLvhAAAAdhAAwDgHQLAPwSgWQaJeAAA"),
+                Ok(fumen)
+            );
+        }
+      
     }
 
     #[test]
     fn comment() {
-        let mut fumen = Fumen::default();
-        fumen.add_page().comment = Some("Hello World!".to_owned());
-        assert_eq!(fumen.encode(), "v115@vhAAgWQAIoMDEvoo2AXXaDEkoA6A");
-        assert_eq!(Fumen::decode("v115@vhAAgWQAIoMDEvoo2AXXaDEkoA6A"), Ok(fumen));
+        unsafe {
+            let mut fumen = Fumen::default();
+            (*fumen.add_page()).comment = Some("Hello World!".to_owned());
+            assert_eq!(fumen.encode(), "v115@vhAAgWQAIoMDEvoo2AXXaDEkoA6A");
+            assert_eq!(Fumen::decode("v115@vhAAgWQAIoMDEvoo2AXXaDEkoA6A"), Ok(fumen));    
+        }
     }
 
     #[test]
     fn comment_unicode() {
-        let mut fumen = Fumen::default();
-        fumen.add_page().comment = Some("こんにちは世界".to_owned());
-        assert_eq!(
-            fumen.encode(), "v115@vhAAgWqAlvs2A1sDfEToABBlvs2AWDEfET4J6Alvs2AWJEfE0H3KBlvtHB00AAA"
-        );
-        assert_eq!(Fumen::decode(
-           "v115@vhAAgWqAlvs2A1sDfEToABBlvs2AWDEfET4J6Alvs2AWJEfE0H3KBlvtHB00AAA"
-        ), Ok(fumen));
+        unsafe {
+            let mut fumen = Fumen::default();
+            (*fumen.add_page()).comment = Some("こんにちは世界".to_owned());
+            assert_eq!(
+                fumen.encode(), "v115@vhAAgWqAlvs2A1sDfEToABBlvs2AWDEfET4J6Alvs2AWJEfE0H3KBlvtHB00AAA"
+            );
+            assert_eq!(Fumen::decode(
+            "v115@vhAAgWqAlvs2A1sDfEToABBlvs2AWDEfET4J6Alvs2AWJEfE0H3KBlvtHB00AAA"
+            ), Ok(fumen));
+    }
     }
 
     #[test]
     fn comment_surrogate_pair() {
-        let mut fumen = Fumen::default();
-        fumen.add_page().comment = Some("🂡🆛🏍😵".to_owned());
-        assert_eq!(
-            fumen.encode(),
+        unsafe {
+            let mut fumen = Fumen::default();
+            (*fumen.add_page()).comment = Some("🂡🆛🏍😵".to_owned());
+            assert_eq!(
+                fumen.encode(),
+                "v115@vhAAgWwAl/SSBzEEfEEFj6Al/SSBzEEfEkGpzBl/SSBzEEfEkpv6Bl/SSBTGEfEEojHB"
+            );
+            assert_eq!(Fumen::decode(
             "v115@vhAAgWwAl/SSBzEEfEEFj6Al/SSBzEEfEkGpzBl/SSBzEEfEkpv6Bl/SSBTGEfEEojHB"
-        );
-        assert_eq!(Fumen::decode(
-           "v115@vhAAgWwAl/SSBzEEfEEFj6Al/SSBzEEfEkGpzBl/SSBzEEfEkpv6Bl/SSBTGEfEEojHB"
-        ), Ok(fumen));
+            ), Ok(fumen));
+      }
     }
 
     #[test]
     fn not_a_fumen() {
-        assert_eq!(Fumen::decode(""), Err(DecodeFumenError));
-        assert_eq!(Fumen::decode("v115@hello world"), Err(DecodeFumenError));
-        assert_eq!(Fumen::decode("無効"), Err(DecodeFumenError));
+        unsafe{
+            assert_eq!(Fumen::decode(""), Err(DecodeFumenError));
+            assert_eq!(Fumen::decode("v115@hello world"), Err(DecodeFumenError));
+            assert_eq!(Fumen::decode("無効"), Err(DecodeFumenError));
+        }
     }
 
     #[test]
     fn no_piece_lock() {
-        let mut fumen = Fumen::default();
-        let page = fumen.add_page();
-        page.field[0] = [CellColor::Grey; 10];
-        page.lock = false;
-        page.piece = Some(Piece {
-            kind: PieceType::T,
-            rotation: RotationState::North,
-            x: 3,
-            y: 1
-        });
-        fumen.add_page();
-        assert_eq!(fumen.encode(), "v115@bhJ8Je1KnvhA1qf");
-        assert_eq!(Fumen::decode("v115@bhJ8Je1KnvhA1qf"), Ok(fumen));
+        unsafe {
+            let mut fumen = Fumen::default();
+            let page = fumen.add_page();
+            (*page).field[0] = [CellColor::Grey; 10];
+            (*page).lock = false;
+            (*page).piece = Some(Piece {
+                kind: PieceType::T,
+                rotation: RotationState::North,
+                x: 3,
+                y: 1
+            });
+            fumen.add_page();
+            assert_eq!(fumen.encode(), "v115@bhJ8Je1KnvhA1qf");
+            assert_eq!(Fumen::decode("v115@bhJ8Je1KnvhA1qf"), Ok(fumen));
+        } 
     }
 }
