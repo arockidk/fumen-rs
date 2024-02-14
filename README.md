@@ -1,1 +1,1 @@
-redone to work with wasm_bindgen
+edited a bit to work with wasm_bindgen
