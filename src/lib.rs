@@ -90,6 +90,13 @@ const BASE64_CHARS: [u8; 64] = [
 ];
 #[wasm_bindgen]
 impl Fumen {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Fumen {
+        Fumen {
+            pages: vec![],
+            guideline: true
+        }
+    }
     /// Encode as a fumen data string.
     pub fn encode(&self) -> String {
         // we need a vec and not a string here since we need to go back and patch in the
