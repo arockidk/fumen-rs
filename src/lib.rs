@@ -347,6 +347,9 @@ impl Fumen {
     pub fn get_pages(&self) -> &Vec<Page> {
         &self.pages
     }
+    pub fn get_pages_mut(&mut self) -> &mut Vec<Page> {
+        &mut self.pages
+    }
 }
 
 fn fumen_field_delta(
